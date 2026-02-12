@@ -6,11 +6,11 @@
 
 void init_ssl() {
     SSL_load_error_strings();
-    OpenSSL_add_ssl_algorithms();  // SSL_library_init() is a macro, but this is more explicit
+    OpenSSL_add_ssl_algorithms();  
 }
 
 SSL_CTX *create_context() {
-    const SSL_METHOD *method = TLS_server_method();  // TLS 1.2/1.3 only
+    const SSL_METHOD *method = TLS_server_method(); 
     SSL_CTX *ctx = SSL_CTX_new(method);
     
     if (!ctx) {
@@ -28,7 +28,6 @@ SSL_CTX *create_context() {
         SSL_OP_SINGLE_DH_USE
     );
     
-    // Strong ciphers only
     SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!eNULL:!LOW:!MD5:!EXP:!RC4");
     
     return ctx;

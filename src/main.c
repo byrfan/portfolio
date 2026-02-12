@@ -18,7 +18,6 @@ int main(void) {
     config_context(ctx, "cert.pem", "key.pem");
     
     printf("Starting HTTPS server on port 8443...\n");
-    printf("Make sure to run: sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443\n");
     
     // Run server (never returns)
     int result = run_server(ctx, 8443);

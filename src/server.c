@@ -20,7 +20,7 @@
 
 
 #define MAX_EVENTS 64
-#define PORT 8443  // Non-root port, use iptables to forward 443→8443
+#define PORT 8443  // Non-root port, use iptables to forward 443 to 8443
 
 typedef struct {
     SSL *ssl;
@@ -28,7 +28,7 @@ typedef struct {
     char buffer[8192];
     size_t bytes_read;
     size_t bytes_written;
-    int state;  // 0: reading request, 1: writing response, 2: closing
+    int state;  
 } connection_t;
 
 int set_nonblocking(int fd) {
@@ -57,7 +57,7 @@ void handle_ssl_accept(connection_t *conn, int epoll_fd) {
     int ret = SSL_accept(conn->ssl);
     
     if (ret == 1) {
-        // SSL handshake complete - start reading requests
+        // SSL handshake complete start reading requests
         struct epoll_event ev;
         ev.events = EPOLLIN | EPOLLET;  // Edge-triggered
         ev.data.ptr = conn;
@@ -67,7 +67,7 @@ void handle_ssl_accept(connection_t *conn, int epoll_fd) {
     
     int err = SSL_get_error(conn->ssl, ret);
     if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) {
-        // Handshake not complete - wait for more data
+        // Handshake not complete wait for more data
         struct epoll_event ev;
         ev.events = (err == SSL_ERROR_WANT_READ ? EPOLLIN : EPOLLOUT) | EPOLLET;
         ev.data.ptr = conn;
@@ -101,7 +101,6 @@ void handle_read(connection_t *conn, int epoll_fd) {
             char method[16], uri[256], version[16];
             sscanf(conn->buffer, "%s %s %s", method, uri, version);
             
-            // Generate response (simplified - you have your file parser)
             char *html = readFile("public/index.html");
             char response[8192];
             int len = snprintf(response, sizeof(response),
@@ -134,7 +133,7 @@ void handle_read(connection_t *conn, int epoll_fd) {
     
     int err = SSL_get_error(conn->ssl, bytes);
     if (err == SSL_ERROR_WANT_READ) {
-        // Need more data - stay in EPOLLIN
+        // Need more data stay in EPOLLIN
         return;
     }
     

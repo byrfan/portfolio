@@ -1,4 +1,5 @@
 ## To Implement:
+    - Sanitize uri of requested files and return 
     - Implement in memory cache of all static files
     - Actually Implement static files
 
