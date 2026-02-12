@@ -21,7 +21,7 @@ int main(void) {
     printf("Make sure to run: sudo iptables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443\n");
     
     // Run server (never returns)
-    int result = run_server(ctx, 443);
+    int result = run_server(ctx, 8443);
     
     // Cleanup (only reached on error)
     SSL_CTX_free(ctx);
