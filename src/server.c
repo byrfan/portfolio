@@ -159,6 +159,7 @@ void handle_read(connection_t *conn, int epoll_fd) {
             char response[8192];
             int len = snprintf(response, sizeof(response),
                 "HTTP/1.1 %d %s\r\n"
+                // implement   vvvvvvvvv accurating typing ? through a similar approach to that of the codes? 
                 "Content-Type: text/html\r\n"
                 "Content-Length: %zu\r\n"
                 "Connection: close\r\n"
