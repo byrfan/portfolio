@@ -2,10 +2,12 @@
 
 #include "server.h"
 #include "parser.h"
+#include "http_codes.h"
 
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -80,6 +82,42 @@ void handle_ssl_accept(connection_t *conn, int epoll_fd) {
     close_connection(conn, epoll_fd);
 }
 
+int handle_uri(char* uri, char** content) {
+    char filepath[256];
+
+    // default or landing page
+    if (strcmp(uri, "/") == 0) {
+       snprintf(filepath, sizeof(filepath), "public/index.html"); 
+    } 
+    /*
+    else if (strcmp(uri, "/ROUTE") == 0 ) {
+        snprintf(filepath, sizeof(filepath), "public/thefile.xyz")
+    }
+    */
+    else {
+        if (uri[0] == '/') {
+            snprintf(filepath, sizeof(filepath), "public/%s", uri + 1);
+        } else {
+            snprintf(filepath, sizeof(filepath), "public/%s", uri );
+        }
+    }
+    
+
+    struct stat st;
+
+    if (stat(filepath, &st) != 0) {
+        return 404;
+    }
+    
+    *content = readFile(filepath);
+
+    if(*content == NULL) {
+        return 500;
+    }
+
+    return 200;
+}
+
 void handle_read(connection_t *conn, int epoll_fd) {
     char buffer[4096];
     int bytes = SSL_read(conn->ssl, buffer, sizeof(buffer) - 1);
@@ -100,21 +138,42 @@ void handle_read(connection_t *conn, int epoll_fd) {
             // Parse request and prepare response
             char method[16], uri[256], version[16];
             sscanf(conn->buffer, "%s %s %s", method, uri, version);
+
+            char* content = NULL;
+          
+            int status = handle_uri(uri, &content);
+          
+            printf("%d  :   %s\n", status, uri);
+
+            const char* status_message = get_status_message(status);
             
-            char *html = readFile("public/index.html");
+            // Determine response body
+            const char* body = content;
+
+            // If error and no content, use error page
+            if (status != 200 && content == NULL) {
+                body = get_status_page(status);
+            }
+
+            // Build full HTTP response
             char response[8192];
             int len = snprintf(response, sizeof(response),
-                "HTTP/1.1 200 OK\r\n"
+                "HTTP/1.1 %d %s\r\n"
                 "Content-Type: text/html\r\n"
-                "Content-Length: %ld\r\n"
+                "Content-Length: %zu\r\n"
                 "Connection: close\r\n"
                 "\r\n"
                 "%s",
-                html ? strlen(html) : 0,
-                html ? html : "");
+                status,
+                status_message,
+                body ? strlen(body) : 0,
+                body ? body : "");
             
-            free(html);
-            
+            // Free content if it was allocated (not for error pages)
+            if (content) {
+                free(content);
+            }
+
             // Store response in connection buffer for writing
             memcpy(conn->buffer, response, len);
             conn->bytes_read = len;  // Reuse as write offset
@@ -168,7 +227,7 @@ void handle_write(connection_t *conn, int epoll_fd) {
     
     int err = SSL_get_error(conn->ssl, bytes);
     if (err == SSL_ERROR_WANT_WRITE) {
-        // Write buffer full - wait for EPOLLOUT again
+        // Write buffer full wait for EPOLLOUT again
         return;
     }
     

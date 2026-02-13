@@ -3,7 +3,7 @@
 
 char* readFile(char* fileName) {
     FILE* fp = fopen(fileName, "rb"); 
-    
+   
     if(fp == NULL) {
         perror("Error: @ Opening File");
         return NULL;
@@ -23,3 +23,4 @@ char* readFile(char* fileName) {
 
     return buffer;
 }
+
