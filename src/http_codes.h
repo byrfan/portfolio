@@ -77,7 +77,27 @@ static const HttpStatus HTTP_STATUS[] = {
     {0, NULL, NULL}  // Sentinel
 };
 
+
+typedef struct {
+    const char* ext;
+    const char* mime;
+} MimeMap;
+
+static const MimeMap MIME_TYPES[] = {
+    // implement future types needed here
+    {"html", "text/html"},
+    {"css", "text/css"},
+    {"js", "application/javascript"},
+    {"pdf", "application/pdf"},
+    {"png", "image/png"},
+    {"jpg", "image/jpg"},
+    {"jpeg", "image/jpeg"},
+    {"gif", "image/gif"},
+    {NULL, NULL}
+};
+
 const char* get_status_message(int code);
 const char* get_status_page(int code);
+const char* get_content_type(char* fn); 
 
 #endif // HTTP_CODES_H

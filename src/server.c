@@ -82,7 +82,7 @@ void handle_ssl_accept(connection_t *conn, int epoll_fd) {
     close_connection(conn, epoll_fd);
 }
 
-int handle_uri(char* uri, char** content) {
+int handle_uri(char* uri, char** content, const char** type) {
     char filepath[256];
 
     // default or landing page
@@ -110,6 +110,7 @@ int handle_uri(char* uri, char** content) {
     }
     
     *content = readFile(filepath);
+    *type = get_content_type(filepath);
 
     if(*content == NULL) {
         return 500;
@@ -140,8 +141,9 @@ void handle_read(connection_t *conn, int epoll_fd) {
             sscanf(conn->buffer, "%s %s %s", method, uri, version);
 
             char* content = NULL;
-          
-            int status = handle_uri(uri, &content);
+            const char* type = NULL;
+
+            int status = handle_uri(uri, &content, &type);
           
             printf("%d  :   %s\n", status, uri);
 
@@ -154,19 +156,21 @@ void handle_read(connection_t *conn, int epoll_fd) {
             if (status != 200 && content == NULL) {
                 body = get_status_page(status);
             }
+            
+            
 
             // Build full HTTP response
             char response[8192];
             int len = snprintf(response, sizeof(response),
                 "HTTP/1.1 %d %s\r\n"
-                // implement   vvvvvvvvv accurating typing ? through a similar approach to that of the codes? 
-                "Content-Type: text/html\r\n"
+                "Content-Type: %s\r\n"
                 "Content-Length: %zu\r\n"
                 "Connection: close\r\n"
                 "\r\n"
                 "%s",
                 status,
                 status_message,
+                type,
                 body ? strlen(body) : 0,
                 body ? body : "");
             
