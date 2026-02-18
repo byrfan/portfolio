@@ -286,10 +286,7 @@ void handle_write(connection_t *conn, int epoll_fd) {
 
 int run_server(SSL_CTX *ctx, int port) {
     int server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-    if (server_fd < 0) {
-        perror("socket");
-        return 1;
-    }
+    if (server_fd < 0) { perror("socket"); return 1; }
 
     int opt = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
@@ -301,118 +298,186 @@ int run_server(SSL_CTX *ctx, int port) {
     };
 
     if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("bind");
-        return 1;
+        perror("bind"); return 1;
     }
 
-    if (listen(server_fd, SOMAXCONN) < 0) {
-        perror("listen");
-        return 1;
-    }
+    if (listen(server_fd, SOMAXCONN) < 0) { perror("listen"); return 1; }
 
     int epoll_fd = epoll_create1(0);
-    if (epoll_fd < 0) {
-        perror("epoll_create");
-        return 1;
-    }
+    if (epoll_fd < 0) { perror("epoll_create"); return 1; }
 
     struct epoll_event ev, events[MAX_EVENTS];
 
-    ev.events = EPOLLIN | EPOLLET;
-    ev.data.fd = server_fd;
+    ev.events = EPOLLIN;  // Level-triggered
+    ev.data.ptr = NULL;   // NULL marks server socket
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &ev);
 
     printf("HTTPS server running on port %d\n", port);
 
     while (1) {
         int nfds = epoll_wait(epoll_fd, events, MAX_EVENTS, -1);
-
         for (int i = 0; i < nfds; i++) {
 
-            /* ----------------- NEW CONNECTION ----------------- */
-            if (events[i].data.fd == server_fd) {
-
+            // ----------------- NEW CONNECTION -----------------
+            if (events[i].data.ptr == NULL) {  // server socket
                 while (1) {
                     struct sockaddr_in client_addr;
                     socklen_t client_len = sizeof(client_addr);
-
                     int client_fd = accept4(server_fd,
                                             (struct sockaddr*)&client_addr,
                                             &client_len,
                                             SOCK_NONBLOCK);
-
                     if (client_fd < 0) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK)
-                            break;
-                        perror("accept");
-                        continue;
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+                        perror("accept"); continue;
                     }
 
                     connection_t *conn = calloc(1, sizeof(connection_t));
-                    if (!conn) {
-                        close(client_fd);
-                        continue;
-                    }
+                    if (!conn) { close(client_fd); continue; }
 
                     conn->fd = client_fd;
                     conn->ssl = SSL_new(ctx);
                     conn->closing = 0;
 
-                    if (!conn->ssl) {
-                        close(client_fd);
-                        free(conn);
-                        continue;
-                    }
-
+                    if (!conn->ssl) { close(client_fd); free(conn); continue; }
                     SSL_set_fd(conn->ssl, client_fd);
 
                     struct epoll_event cev;
-                    cev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+                    cev.events = EPOLLIN | EPOLLRDHUP;  // no EPOLLET
                     cev.data.ptr = conn;
-
                     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &cev);
 
-                    handle_ssl_accept(conn, epoll_fd);
+                    // Immediately attempt handshake
+                    while (1) {
+                        int ret = SSL_accept(conn->ssl);
+                        if (ret == 1) break;
+
+                        int err = SSL_get_error(conn->ssl, ret);
+                        if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) break;
+
+                        ERR_print_errors_fp(stderr);
+                        close_connection(conn, epoll_fd);
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            // ----------------- EXISTING CONNECTION -----------------
+            connection_t *conn = events[i].data.ptr;
+            if (!conn || conn->closing) continue;
+
+            if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
+                close_connection(conn, epoll_fd);
+                continue;
+            }
+
+            if (!conn->ssl) {
+                close_connection(conn, epoll_fd);
+                continue;
+            }
+
+            // ----------------- SSL Handshake -----------------
+            if (!SSL_is_init_finished(conn->ssl)) {
+                while (1) {
+                    int ret = SSL_accept(conn->ssl);
+                    if (ret == 1) break;
+
+                    int err = SSL_get_error(conn->ssl, ret);
+                    if (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE) break;
+
+                    ERR_print_errors_fp(stderr);
+                    close_connection(conn, epoll_fd);
+                    break;
+                }
+                continue;
+            }
+
+            // ----------------- READ EVENT -----------------
+            if (events[i].events & EPOLLIN) {
+                while (1) {
+                    char buf[4096];
+                    int bytes = SSL_read(conn->ssl, buf, sizeof(buf));
+                    if (bytes > 0) {
+                        if (conn->bytes_read + bytes < BUFFER_SIZE) {
+                            memcpy(conn->buffer + conn->bytes_read, buf, bytes);
+                            conn->bytes_read += bytes;
+                            conn->buffer[conn->bytes_read] = '\0';
+                        }
+
+                        char *current_pos = conn->buffer;
+                        char *end;
+                        while ((end = strstr(current_pos, "\r\n\r\n")) != NULL) {
+                            char method[16], uri[256], version[16];
+                            sscanf(current_pos, "%15s %255s %15s", method, uri, version);
+
+                            char *content = NULL;
+                            const char *type = NULL;
+                            int status = handle_uri(uri, &content, &type);
+                            queue_response(conn, status, type, content);
+                            if (content) free(content);
+
+                            current_pos = end + 4;
+                        }
+
+                        int remaining = conn->bytes_read - (current_pos - conn->buffer);
+                        if (remaining > 0) memmove(conn->buffer, current_pos, remaining);
+                        conn->bytes_read = remaining;
+
+                        // Mark writable if response queued
+                        if (conn->response_queue) {
+                            struct epoll_event ev_mod;
+                            ev_mod.events = EPOLLOUT | EPOLLRDHUP;
+                            ev_mod.data.ptr = conn;
+                            epoll_ctl(epoll_fd, EPOLL_CTL_MOD, conn->fd, &ev_mod);
+                        }
+                        break;  // stop after one read batch
+                    }
+
+                    int err = SSL_get_error(conn->ssl, bytes);
+                    if (err == SSL_ERROR_WANT_READ) break;
+                    close_connection(conn, epoll_fd);
+                    break;
                 }
             }
 
-            /* ----------------- EXISTING CONNECTION ----------------- */
-            else {
-                connection_t *conn = events[i].data.ptr;
-
-                if (!conn || conn->closing)
-                    continue;
-
-                if (events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) {
-                    close_connection(conn, epoll_fd);
-                    continue;
-                }
-
-                if (!conn->ssl) {
-                    close_connection(conn, epoll_fd);
-                    continue;
-                }
-
-                if (events[i].events & EPOLLIN) {
-                    if (!SSL_is_init_finished(conn->ssl)) {
-                        handle_ssl_accept(conn, epoll_fd);
-                    } else {
-                        handle_read(conn, epoll_fd);
+            // ----------------- WRITE EVENT -----------------
+            if (events[i].events & EPOLLOUT) {
+                while (conn->current_response || conn->response_queue) {
+                    if (!conn->current_response && conn->response_queue) {
+                        conn->current_response = conn->response_queue;
+                        conn->response_queue = conn->response_queue->next;
+                        conn->current_response->next = NULL;
+                        conn->bytes_written = 0;
                     }
 
-                    if (conn->closing)
-                        continue;
-                }
+                    response_node_t *resp = conn->current_response;
+                    if (!resp) break;
 
-                if (events[i].events & EPOLLOUT) {
-                    if (!SSL_is_init_finished(conn->ssl)) {
-                        handle_ssl_accept(conn, epoll_fd);
-                    } else {
-                        handle_write(conn, epoll_fd);
+                    int remaining = resp->len - conn->bytes_written;
+                    int bytes = SSL_write(conn->ssl, resp->data + conn->bytes_written, remaining);
+                    if (bytes > 0) {
+                        conn->bytes_written += bytes;
+                        if (conn->bytes_written >= resp->len) {
+                            free(resp);
+                            conn->current_response = NULL;
+                            conn->bytes_written = 0;
+                        }
+                        continue;
                     }
 
-                    if (conn->closing)
-                        continue;
+                    int err = SSL_get_error(conn->ssl, bytes);
+                    if (err == SSL_ERROR_WANT_WRITE) break;
+                    close_connection(conn, epoll_fd);
+                    break;
+                }
+
+                // Switch back to read if no response pending
+                if (!conn->current_response) {
+                    struct epoll_event ev_mod;
+                    ev_mod.events = EPOLLIN | EPOLLRDHUP;
+                    ev_mod.data.ptr = conn;
+                    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, conn->fd, &ev_mod);
                 }
             }
         }
