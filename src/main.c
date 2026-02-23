@@ -2,8 +2,31 @@
 #include "server.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <execinfo.h>
+#include <unistd.h>
+
+void crash_handler(int sig) {
+    void *array[20];
+    size_t size;
+    
+    fprintf(stderr, "\n=== CRASH DETECTED (signal %d) ===\n", sig);
+    
+    // Get backtrace addresses
+    size = backtrace(array, 20);
+    
+    // Print backtrace
+    fprintf(stderr, "Backtrace:\n");
+    backtrace_symbols_fd(array, size, STDERR_FILENO);
+    
+    exit(1);
+}
 
 int main(void) {
+    signal(SIGSEGV, crash_handler);  // Segmentation fault
+    signal(SIGABRT, crash_handler);  // Abort
+    signal(SIGFPE, crash_handler);   // Floating point exception
+    signal(SIGILL, crash_handler);   // Illegal instruction
     // Initialize SSL
     init_ssl();
     
