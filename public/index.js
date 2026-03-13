@@ -1,32 +1,31 @@
 console.log("loaded!");
 
+// Load saved theme
+(function() {
+    const savedTheme = localStorage.getItem('theme') || 'dark-mode';
+    document.body.className = savedTheme;
+})();
+
 window.toggleTheme = function () {
-    const btns = document.querySelectorAll(".socials .btn");
-    
     if (document.body.classList.contains("dark-mode")) {
         document.body.className = "light-mode";
         localStorage.setItem("theme", "light-mode");
-
-        // Swap social buttons to dark-outline in light mode
-        btns.forEach(btn => btn.classList.replace("btn-outline-light", "btn-outline-dark"));
-
     } else {
         document.body.className = "dark-mode";
         localStorage.setItem("theme", "dark-mode");
-
-        // Swap social buttons back to light-outline in dark mode
-        btns.forEach(btn => btn.classList.replace("btn-outline-dark", "btn-outline-light"));
     }
 };
 
-
 // ===== Cursor Glow =====
 const cursorLight = document.getElementById("cursorLight");
-document.addEventListener("mousemove", (e) => {
-    cursorLight.style.left = e.clientX + "px";
-    cursorLight.style.top = e.clientY + "px";
-});
+if (cursorLight) {
+    document.addEventListener("mousemove", (e) => {
+        cursorLight.style.left = e.clientX + "px";
+        cursorLight.style.top = e.clientY + "px";
+    });
+}
 
+// ===== Typing Animation =====
 const roles = [
     "Bachelor of Engineering Student @ QUT",
     "Computer & Software Systems Major",
@@ -65,5 +64,3 @@ function deleteRole() {
 
 // Start typing immediately
 typeRole();
-
-

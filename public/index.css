@@ -25,7 +25,6 @@ html, body {
     padding: 4rem;
     display: flex;
     flex-direction: column;
-    /*justify-content: center;*/
 }
 
 .intro-wrapper {
@@ -34,7 +33,6 @@ html, body {
     left: 0;
     transform: translateY(-10%);
     padding: 4rem;
-    /* Optional: adjust padding if needed */
     animation: fadeInUp 1s ease forwards;
 }
 
@@ -52,6 +50,7 @@ html, body {
     display: flex;
     align-items: center;
     gap: 5px;
+    flex-wrap: wrap;
 }
 
 .role-subtitle .cursor {
@@ -72,11 +71,12 @@ html, body {
 }
 
 .bottom-bar {
-    margin-top: auto; /* pushes it to the bottom */
+    margin-top: auto;
     display: flex;
-    gap: 1rem; /* space between socials and button */
-    justify-content: flex-start; /* aligns to left by default */
-    align-items: center; /* vertically center button with socials */
+    gap: 1rem;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .social-icon svg path {
@@ -109,10 +109,6 @@ body.light-mode .social-icon {
     color: var(--accent);
 }
 
-.theme-toggle {
-    position: relative;
-}
-
 /* ===== Right Panel ===== */
 .right-panel {
     width: 50%;
@@ -120,7 +116,7 @@ body.light-mode .social-icon {
     padding: 4rem;
     height: 100vh;
     overflow-y: auto;
-    margin-top: 5vh; /* push content down by 5% of viewport height */
+    margin-top: 5vh;
 }
 
 .project-card {
@@ -139,6 +135,10 @@ body.light-mode .social-icon {
     margin-bottom: 10px;
     height: 22px;
     width: 22px;
+}
+
+body.light-mode .project-card svg {
+    color: black;
 }
 
 /* ===== Buttons ===== */
@@ -170,6 +170,13 @@ body.light-mode .social-icon {
 
 body.light-mode .cursor-light {
     display: none;
+}
+
+/* Hide cursor light on touch devices */
+@media (hover: none) {
+    .cursor-light {
+        display: none;
+    }
 }
 
 /* ===== Dark Mode ===== */
@@ -210,6 +217,7 @@ body.light-mode .project-card {
 @media (max-width: 768px) {
     .split-layout {
         flex-direction: column;
+        height: auto;
     }
 
     .left-panel,
@@ -218,13 +226,46 @@ body.light-mode .project-card {
         position: relative;
         margin-left: 0;
         height: auto;
+        padding: 2rem;
     }
 
-    .theme-toggle {
-        position: relative;
+    .left-panel {
+        min-height: auto;
+    }
+
+    .intro-wrapper {
+        position: static;
+        transform: none;
+        padding: 0;
         margin-bottom: 2rem;
-        top: auto;
-        right: auto;
+    }
+
+    .name-title {
+        font-size: 2.5rem;
+    }
+
+    .role-subtitle {
+        font-size: 1.2rem;
+    }
+
+    .about-text {
+        font-size: 1.1rem;
+    }
+
+    .right-panel {
+        margin-top: 0;
+        padding-top: 0;
+    }
+
+    .project-card {
+        padding: 1.5rem;
+    }
+
+    .bottom-bar {
+        margin-top: 2rem;
+    }
+
+    .cursor-light {
+        display: none;
     }
 }
-
